@@ -21,11 +21,11 @@
 #   -h: Print usage help
 #
 # Environment Variables (optional):
-#   MACOS_DEPS_VERSION  : Pre-compiled macOS dependencies version
-#   CEF_BUILD_VERSION   : Chromium Embedded Framework version
-#   VLC_VERISON         : VLC version
-#   SPARKLE_VERSION     : Sparke Framework version
-#   BUILD_DIR           : Alternative directory to build OBS in
+#   MACOS_DEPS_VERSION        : Pre-compiled macOS dependencies version
+#   MACOS_CEF_BUILD_VERSION   : Chromium Embedded Framework version
+#   VLC_VERISON               : VLC version
+#   SPARKLE_VERSION           : Sparke Framework version
+#   BUILD_DIR                 : Alternative directory to build OBS in
 #
 ##############################################################################
 
@@ -41,18 +41,19 @@ BUILD_DIR="${BUILD_DIR:-build}"
 BUILD_CONFIG=${BUILD_CONFIG:-RelWithDebInfo}
 CI_SCRIPTS="${CHECKOUT_DIR}/CI/scripts/macos"
 CI_WORKFLOW="${CHECKOUT_DIR}/.github/workflows/main.yml"
-CI_MACOS_CEF_VERSION=$(/bin/cat ${CI_WORKFLOW} | /usr/bin/sed -En "s/[ ]+MACOS_CEF_BUILD_VERSION: '([0-9]+)'/\1/p")
-CI_DEPS_VERSION=$(/bin/cat ${CI_WORKFLOW} | /usr/bin/sed -En "s/[ ]+MACOS_DEPS_VERSION: '([0-9\-]+)'/\1/p")
-CI_VLC_VERSION=$(/bin/cat ${CI_WORKFLOW} | /usr/bin/sed -En "s/[ ]+VLC_VERSION: '([0-9\.]+)'/\1/p")
-CI_SPARKLE_VERSION=$(/bin/cat ${CI_WORKFLOW} | /usr/bin/sed -En "s/[ ]+SPARKLE_VERSION: '([0-9\.]+)'/\1/p")
-CI_QT_VERSION=$(/bin/cat ${CI_WORKFLOW} | /usr/bin/sed -En "s/[ ]+QT_VERSION: '([0-9\.]+)'/\1/p" | /usr/bin/head -1)
-CI_MIN_MACOS_VERSION=$(/bin/cat ${CI_WORKFLOW} | /usr/bin/sed -En "s/[ ]+MIN_MACOS_VERSION: '([0-9\.]+)'/\1/p")
+CI_MACOS_CEF_VERSION=$(/bin/cat "${CI_WORKFLOW}" | /usr/bin/sed -En "s/[ ]+MACOS_CEF_BUILD_VERSION: '([0-9]+)'/\1/p")
+CI_DEPS_VERSION=$(/bin/cat "${CI_WORKFLOW}" | /usr/bin/sed -En "s/[ ]+MACOS_DEPS_VERSION: '([0-9\-]+)'/\1/p")
+CI_VLC_VERSION=$(/bin/cat "${CI_WORKFLOW}" | /usr/bin/sed -En "s/[ ]+VLC_VERSION: '([0-9\.]+)'/\1/p")
+CI_SPARKLE_VERSION=$(/bin/cat "${CI_WORKFLOW}" | /usr/bin/sed -En "s/[ ]+SPARKLE_VERSION: '([0-9\.]+)'/\1/p")
+CI_QT_VERSION=$(/bin/cat "${CI_WORKFLOW}" | /usr/bin/sed -En "s/[ ]+QT_VERSION: '([0-9\.]+)'/\1/p" | /usr/bin/head -1)
+CI_MIN_MACOS_VERSION=$(/bin/cat "${CI_WORKFLOW}" | /usr/bin/sed -En "s/[ ]+MIN_MACOS_VERSION: '([0-9\.]+)'/\1/p")
 NPROC="${NPROC:-$(sysctl -n hw.ncpu)}"
+CURRENT_ARCH=$(uname -m)
 
 BUILD_DEPS=(
     "obs-deps ${MACOS_DEPS_VERSION:-${CI_DEPS_VERSION}}"
     "qt-deps ${QT_VERSION:-${CI_QT_VERSION}} ${MACOS_DEPS_VERSION:-${CI_DEPS_VERSION}}"
-    "cef ${CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}"
+    "cef ${MACOS_CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}"
     "vlc ${VLC_VERSION:-${CI_VLC_VERSION}}"
     "sparkle ${SPARKLE_VERSION:-${CI_SPARKLE_VERSION}}"
 )
@@ -99,7 +100,7 @@ exists() {
 }
 
 ensure_dir() {
-    [[ -n ${1} ]] && /bin/mkdir -p ${1} && builtin cd ${1}
+    [[ -n "${1}" ]] && /bin/mkdir -p "${1}" && builtin cd "${1}"
 }
 
 cleanup() {
@@ -142,7 +143,7 @@ install_homebrew_deps() {
         brew untap local/python2
     fi
 
-    brew bundle --file ${CI_SCRIPTS}/Brewfile
+    brew bundle --file "${CI_SCRIPTS}/Brewfile"
 
     check_curl
 }
@@ -160,33 +161,33 @@ check_curl() {
 }
 
 check_ccache() {
-    export PATH=/usr/local/opt/ccache/libexec:${PATH}
+    export PATH="/usr/local/opt/ccache/libexec:${PATH}"
     CCACHE_STATUS=$(ccache -s >/dev/null 2>&1 && /bin/echo "CCache available." || /bin/echo "CCache is not available.")
     info "${CCACHE_STATUS}"
 }
 
 install_obs-deps() {
     hr "Setting up pre-built macOS OBS dependencies v${1}"
-    ensure_dir ${DEPS_BUILD_DIR}
+    ensure_dir "${DEPS_BUILD_DIR}"
     step "Download..."
-    ${CURLCMD} --progress-bar -L -C - -O https://github.com/obsproject/obs-deps/releases/download/${1}/macos-deps-${1}.tar.gz
+    ${CURLCMD} --progress-bar -L -C - -O https://github.com/obsproject/obs-deps/releases/download/${1}/macos-deps-${CURRENT_ARCH}-${1}.tar.gz
     step "Unpack..."
-    /usr/bin/tar -xf ./macos-deps-${1}.tar.gz -C /tmp
+    /usr/bin/tar -xf "./macos-deps-${CURRENT_ARCH}-${1}.tar.gz" -C /tmp
 }
 
 install_qt-deps() {
     hr "Setting up pre-built dependency QT v${1}"
-    ensure_dir ${DEPS_BUILD_DIR}
+    ensure_dir "${DEPS_BUILD_DIR}"
     step "Download..."
-    ${CURLCMD} --progress-bar -L -C - -O https://github.com/obsproject/obs-deps/releases/download/${2}/macos-qt-${1}-${2}.tar.gz
+    ${CURLCMD} --progress-bar -L -C - -O https://github.com/obsproject/obs-deps/releases/download/${2}/macos-qt-${1}-${CURRENT_ARCH}-${2}.tar.gz
     step "Unpack..."
-    /usr/bin/tar -xf ./macos-qt-${1}-${2}.tar.gz -C /tmp
+    /usr/bin/tar -xf ./macos-qt-${1}-${CURRENT_ARCH}-${2}.tar.gz -C /tmp
     /usr/bin/xattr -r -d com.apple.quarantine /tmp/obsdeps
 }
 
 install_vlc() {
     hr "Setting up dependency VLC v${1}"
-    ensure_dir ${DEPS_BUILD_DIR}
+    ensure_dir "${DEPS_BUILD_DIR}"
     step "Download..."
     ${CURLCMD} --progress-bar -L -C - -O https://downloads.videolan.org/vlc/${1}/vlc-${1}.tar.xz
     step "Unpack ..."
@@ -195,7 +196,7 @@ install_vlc() {
 
 install_sparkle() {
     hr "Setting up dependency Sparkle v${1} (might prompt for password)"
-    ensure_dir ${DEPS_BUILD_DIR}/sparkle
+    ensure_dir "${DEPS_BUILD_DIR}/sparkle"
     step "Download..."
     ${CURLCMD} --progress-bar -L -C - -o sparkle.tar.bz2 https://github.com/sparkle-project/Sparkle/releases/download/${1}/Sparkle-${1}.tar.bz2
     step "Unpack..."
@@ -210,7 +211,7 @@ install_sparkle() {
 
 install_cef() {
     hr "Building dependency CEF v${1}"
-    ensure_dir ${DEPS_BUILD_DIR}
+    ensure_dir "${DEPS_BUILD_DIR}"
     step "Download..."
     ${CURLCMD} --progress-bar -L -C - -O https://cdn-fastly.obsproject.com/downloads/cef_binary_${1}_macosx64.tar.bz2
     step "Unpack..."
@@ -218,7 +219,7 @@ install_cef() {
     cd ./cef_binary_${1}_macosx64
     step "Fix tests..."
     /usr/bin/sed -i '.orig' '/add_subdirectory(tests\/ceftests)/d' ./CMakeLists.txt
-    /usr/bin/sed -i '.orig' 's/"'$(test "${CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}" -le 3770 && echo "10.9" || echo "10.10")'"/"'${MIN_MACOS_VERSION:-${CI_MIN_MACOS_VERSION}}'"/' ./cmake/cef_variables.cmake
+    /usr/bin/sed -i '.orig' 's/"'$(test "${MACOS_CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}" -le 3770 && echo "10.9" || echo "10.10")'"/"'${MIN_MACOS_VERSION:-${CI_MIN_MACOS_VERSION}}'"/' ./cmake/cef_variables.cmake
     ensure_dir ./build
     step "Run CMAKE..."
     cmake \
@@ -257,13 +258,13 @@ configure_obs_build() {
 
     if [ -d ./OBS.app ]; then
         ensure_dir "${NIGHTLY_DIR}"
-        /bin/mv ../${BUILD_DIR}/OBS.app .
+        /bin/mv "../${BUILD_DIR}/OBS.app" .
         info "You can find OBS.app in ${NIGHTLY_DIR}"
     fi
     ensure_dir "${CHECKOUT_DIR}/${BUILD_DIR}"
     if ([ -n "${PACKAGE_NAME}" ] && [ -f ${PACKAGE_NAME} ]); then
         ensure_dir "${NIGHTLY_DIR}"
-        /bin/mv ../${BUILD_DIR}/$(basename "${PACKAGE_NAME}") .
+        /bin/mv "../${BUILD_DIR}/$(basename "${PACKAGE_NAME}")" .
         info "You can find ${PACKAGE_NAME} in ${NIGHTLY_DIR}"
     fi
 
@@ -272,15 +273,14 @@ configure_obs_build() {
     hr "Run CMAKE for OBS..."
     cmake -DENABLE_SPARKLE_UPDATER=ON \
         -DCMAKE_OSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION:-${CI_MIN_MACOS_VERSION}} \
-        -DDISABLE_PYTHON=ON  \
         -DQTDIR="/tmp/obsdeps" \
         -DSWIGDIR="/tmp/obsdeps" \
         -DDepsPath="/tmp/obsdeps" \
         -DVLCPath="${DEPS_BUILD_DIR}/vlc-${VLC_VERSION:-${CI_VLC_VERSION}}" \
         -DBUILD_BROWSER=ON \
-        -DBROWSER_LEGACY="$(test "${CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}" -le 3770 && echo "ON" || echo "OFF")" \
+        -DBROWSER_LEGACY="$(test "${MACOS_CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}" -le 3770 && echo "ON" || echo "OFF")" \
         -DWITH_RTMPS=ON \
-        -DCEF_ROOT_DIR="${DEPS_BUILD_DIR}/cef_binary_${CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}_macosx64" \
+        -DCEF_ROOT_DIR="${DEPS_BUILD_DIR}/cef_binary_${MACOS_CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}_macosx64" \
         -DCMAKE_BUILD_TYPE="${BUILD_CONFIG}" \
         ..
 
@@ -325,18 +325,19 @@ bundle_dylibs() {
         ./OBS.app/Contents/PlugIns/rtmp-services.so
         ./OBS.app/Contents/MacOS/obs-ffmpeg-mux
         ./OBS.app/Contents/MacOS/obslua.so
+        ./OBS.app/Contents/MacOS/_obspython.so
         ./OBS.app/Contents/PlugIns/obs-x264.so
         ./OBS.app/Contents/PlugIns/text-freetype2.so
         ./OBS.app/Contents/PlugIns/obs-outputs.so
         )
-    if ! [ "${CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}" -le 3770 ]; then
-        ${CI_SCRIPTS}/app/dylibbundler -cd -of -a ./OBS.app -q -f \
+    if ! [ "${MACOS_CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}" -le 3770 ]; then
+        "${CI_SCRIPTS}/app/dylibbundler" -cd -of -a ./OBS.app -q -f \
             -s ./OBS.app/Contents/MacOS \
             -s "${DEPS_BUILD_DIR}/sparkle/Sparkle.framework" \
             -s ./rundir/${BUILD_CONFIG}/bin/ \
             $(echo "${BUNDLE_PLUGINS[@]/#/-x }")
     else
-        ${CI_SCRIPTS}/app/dylibbundler -cd -of -a ./OBS.app -q -f \
+        "${CI_SCRIPTS}/app/dylibbundler" -cd -of -a ./OBS.app -q -f \
             -s ./OBS.app/Contents/MacOS \
             -s "${DEPS_BUILD_DIR}/sparkle/Sparkle.framework" \
             -s ./rundir/${BUILD_CONFIG}/bin/ \
@@ -371,7 +372,7 @@ install_frameworks() {
 
     hr "Adding Chromium Embedded Framework"
     step "Copy Framework..."
-    /bin/cp -R "${DEPS_BUILD_DIR}/cef_binary_${CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}_macosx64/Release/Chromium Embedded Framework.framework" ./OBS.app/Contents/Frameworks/
+    /bin/cp -R "${DEPS_BUILD_DIR}/cef_binary_${MACOS_CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}_macosx64/Release/Chromium Embedded Framework.framework" ./OBS.app/Contents/Frameworks/
 }
 
 prepare_macos_bundle() {
@@ -394,28 +395,28 @@ prepare_macos_bundle() {
     /bin/cp rundir/${BUILD_CONFIG}/bin/obs ./OBS.app/Contents/MacOS
     /bin/cp rundir/${BUILD_CONFIG}/bin/obs-ffmpeg-mux ./OBS.app/Contents/MacOS
     /bin/cp rundir/${BUILD_CONFIG}/bin/libobsglad.0.dylib ./OBS.app/Contents/MacOS
-    if ! [ "${CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}" -le 3770 ]; then
+    if ! [ "${MACOS_CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}" -le 3770 ]; then
         /bin/cp -R "rundir/${BUILD_CONFIG}/bin/OBS Helper.app" "./OBS.app/Contents/Frameworks/OBS Helper.app"
         /bin/cp -R "rundir/${BUILD_CONFIG}/bin/OBS Helper (GPU).app" "./OBS.app/Contents/Frameworks/OBS Helper (GPU).app"
         /bin/cp -R "rundir/${BUILD_CONFIG}/bin/OBS Helper (Plugin).app" "./OBS.app/Contents/Frameworks/OBS Helper (Plugin).app"
         /bin/cp -R "rundir/${BUILD_CONFIG}/bin/OBS Helper (Renderer).app" "./OBS.app/Contents/Frameworks/OBS Helper (Renderer).app"
     fi
     /bin/cp -R rundir/${BUILD_CONFIG}/data ./OBS.app/Contents/Resources
-    /bin/cp ${CI_SCRIPTS}/app/AppIcon.icns ./OBS.app/Contents/Resources
+    /bin/cp "${CI_SCRIPTS}/app/AppIcon.icns" ./OBS.app/Contents/Resources
     /bin/cp -R rundir/${BUILD_CONFIG}/obs-plugins/ ./OBS.app/Contents/PlugIns
-    /bin/cp ${CI_SCRIPTS}/app/Info.plist ./OBS.app/Contents
+    /bin/cp "${CI_SCRIPTS}/app/Info.plist" ./OBS.app/Contents
     # Scripting plugins are required to be placed in same directory as binary
     if [ -d ./OBS.app/Contents/Resources/data/obs-scripting ]; then
         /bin/mv ./OBS.app/Contents/Resources/data/obs-scripting/obslua.so ./OBS.app/Contents/MacOS/
-        # /bin/mv ./OBS.app/Contents/Resources/data/obs-scripting/_obspython.so ./OBS.app/Contents/MacOS/
-        # /bin/mv ./OBS.app/Contents/Resources/data/obs-scripting/obspython.py ./OBS.app/Contents/MacOS/
+        /bin/mv ./OBS.app/Contents/Resources/data/obs-scripting/_obspython.so ./OBS.app/Contents/MacOS/
+        /bin/mv ./OBS.app/Contents/Resources/data/obs-scripting/obspython.py ./OBS.app/Contents/MacOS/
         /bin/rm -rf ./OBS.app/Contents/Resources/data/obs-scripting/
     fi
 
     bundle_dylibs
     install_frameworks
 
-    /bin/cp ${CI_SCRIPTS}/app/OBSPublicDSAKey.pem ./OBS.app/Contents/Resources
+    /bin/cp "${CI_SCRIPTS}/app/OBSPublicDSAKey.pem" ./OBS.app/Contents/Resources
 
     step "Set bundle meta information..."
     /usr/bin/plutil -insert CFBundleVersion -string ${GIT_TAG}-${GIT_HASH} ./OBS.app/Contents/Info.plist
@@ -519,16 +520,25 @@ codesign_bundle() {
 
     step "Code-sign CEF framework..."
     /bin/echo -n "${COLOR_ORANGE}"
-    /usr/bin/codesign --force --options runtime --sign "${CODESIGN_IDENT}" "./OBS.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libEGL.dylib"
-    /usr/bin/codesign --force --options runtime --sign "${CODESIGN_IDENT}" "./OBS.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libswiftshader_libEGL.dylib"
-    /usr/bin/codesign --force --options runtime --sign "${CODESIGN_IDENT}" "./OBS.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libGLESv2.dylib"
-    /usr/bin/codesign --force --options runtime --sign "${CODESIGN_IDENT}" "./OBS.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libswiftshader_libGLESv2.dylib"
-    if ! [ "${CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}" -le 3770 ]; then
-        /usr/bin/codesign --force --options runtime --sign "${CODESIGN_IDENT}" "./OBS.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libvk_swiftshader.dylib"
+    /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/app/entitlements.plist" --sign "${CODESIGN_IDENT}" "./OBS.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libEGL.dylib"
+    /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/app/entitlements.plist" --sign "${CODESIGN_IDENT}" "./OBS.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libswiftshader_libEGL.dylib"
+    /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/app/entitlements.plist" --sign "${CODESIGN_IDENT}" "./OBS.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libGLESv2.dylib"
+    /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/app/entitlements.plist" --sign "${CODESIGN_IDENT}" "./OBS.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libswiftshader_libGLESv2.dylib"
+    if ! [ "${MACOS_CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}" -le 3770 ]; then
+        /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/app/entitlements.plist" --sign "${CODESIGN_IDENT}" "./OBS.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libvk_swiftshader.dylib"
     fi
-    /usr/bin/codesign --force --options runtime --sign "${CODESIGN_IDENT}" --deep "./OBS.app/Contents/Frameworks/Chromium Embedded Framework.framework"
 
     /bin/echo -n "${COLOR_RESET}"
+
+    if ! [ "${MACOS_CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}" -le 3770 ]; then
+        step "Code-sign CEF helper apps..."
+        /bin/echo -n "${COLOR_ORANGE}"
+        /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/helpers/helper-entitlements.plist" --sign "${CODESIGN_IDENT}" --deep "./OBS.app/Contents/Frameworks/OBS Helper.app"
+        /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/helpers/helper-gpu-entitlements.plist" --sign "${CODESIGN_IDENT}" --deep "./OBS.app/Contents/Frameworks/OBS Helper (GPU).app"
+        /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/helpers/helper-plugin-entitlements.plist" --sign "${CODESIGN_IDENT}" --deep "./OBS.app/Contents/Frameworks/OBS Helper (Plugin).app"
+        /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/helpers/helper-renderer-entitlements.plist" --sign "${CODESIGN_IDENT}" --deep "./OBS.app/Contents/Frameworks/OBS Helper (Renderer).app"
+        /bin/echo -n "${COLOR_RESET}"
+    fi
 
     step "Code-sign DAL Plugin..."
     /bin/echo -n "${COLOR_ORANGE}"
@@ -539,16 +549,6 @@ codesign_bundle() {
     /bin/echo -n "${COLOR_ORANGE}"
     /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/app/entitlements.plist" --sign "${CODESIGN_IDENT}" --deep ./OBS.app
     /bin/echo -n "${COLOR_RESET}"
-
-    if ! [ "${CEF_BUILD_VERSION:-${CI_MACOS_CEF_VERSION}}" -le 3770 ]; then
-        step "Code-sign CEF helper apps..."
-        /bin/echo -n "${COLOR_ORANGE}"
-        /usr/bin/codesign --force --options runtime --sign "${CODESIGN_IDENT}" --deep "./OBS.app/Contents/Frameworks/OBS Helper.app"
-        /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/helpers/helper-gpu-entitlements.plist" --sign "${CODESIGN_IDENT}" --deep "./OBS.app/Contents/Frameworks/OBS Helper (GPU).app"
-        /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/helpers/helper-plugin-entitlements.plist" --sign "${CODESIGN_IDENT}" --deep "./OBS.app/Contents/Frameworks/OBS Helper (Plugin).app"
-        /usr/bin/codesign --force --options runtime --entitlements "${CI_SCRIPTS}/helpers/helper-renderer-entitlements.plist" --sign "${CODESIGN_IDENT}" --deep "./OBS.app/Contents/Frameworks/OBS Helper (Renderer).app"
-        /bin/echo -n "${COLOR_RESET}"
-    fi
 
     step "Check code-sign result..."
     /usr/bin/codesign -dvv ./OBS.app

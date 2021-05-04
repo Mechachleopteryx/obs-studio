@@ -17,6 +17,7 @@ struct image_source {
 
 	char *file;
 	bool persistent;
+	bool linear_alpha;
 	time_t file_timestamp;
 	float update_time_elapsed;
 	uint64_t last_time;
@@ -74,11 +75,13 @@ static void image_source_update(void *data, obs_data_t *settings)
 	struct image_source *context = data;
 	const char *file = obs_data_get_string(settings, "file");
 	const bool unload = obs_data_get_bool(settings, "unload");
+	const bool linear_alpha = obs_data_get_bool(settings, "linear_alpha");
 
 	if (context->file)
 		bfree(context->file);
 	context->file = bstrdup(file);
 	context->persistent = !unload;
+	context->linear_alpha = linear_alpha;
 
 	/* Load the image if the source is persistent or showing */
 	if (context->persistent || obs_source_showing(context->source))
@@ -90,6 +93,7 @@ static void image_source_update(void *data, obs_data_t *settings)
 static void image_source_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_bool(settings, "unload", false);
+	obs_data_set_default_bool(settings, "linear_alpha", false);
 }
 
 static void image_source_show(void *data)
@@ -147,10 +151,40 @@ static void image_source_render(void *data, gs_effect_t *effect)
 	if (!context->if2.image.texture)
 		return;
 
-	gs_effect_set_texture(gs_effect_get_param_by_name(effect, "image"),
-			      context->if2.image.texture);
-	gs_draw_sprite(context->if2.image.texture, 0, context->if2.image.cx,
-		       context->if2.image.cy);
+	const char *tech_name = "DrawNonlinearAlpha";
+	enum gs_blend_type blend_src_color = GS_BLEND_ONE;
+	if (context->linear_alpha) {
+		tech_name = "Draw";
+		blend_src_color = GS_BLEND_SRCALPHA;
+	}
+
+	effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+	gs_technique_t *tech = gs_effect_get_technique(effect, tech_name);
+
+	const bool previous = gs_framebuffer_srgb_enabled();
+	gs_enable_framebuffer_srgb(true);
+
+	gs_blend_state_push();
+	gs_blend_function_separate(blend_src_color, GS_BLEND_INVSRCALPHA,
+				   GS_BLEND_ONE, GS_BLEND_INVSRCALPHA);
+
+	gs_eparam_t *const param = gs_effect_get_param_by_name(effect, "image");
+	gs_effect_set_texture_srgb(param, context->if2.image.texture);
+
+	size_t passes = gs_technique_begin(tech);
+	for (size_t i = 0; i < passes; i++) {
+		gs_technique_begin_pass(tech, i);
+
+		gs_draw_sprite(context->if2.image.texture, 0,
+			       context->if2.image.cx, context->if2.image.cy);
+
+		gs_technique_end_pass(tech);
+	}
+	gs_technique_end(tech);
+
+	gs_blend_state_pop();
+
+	gs_enable_framebuffer_srgb(previous);
 }
 
 static void image_source_tick(void *data, float seconds)
@@ -242,6 +276,8 @@ static obs_properties_t *image_source_properties(void *data)
 				OBS_PATH_FILE, image_filter, path.array);
 	obs_properties_add_bool(props, "unload",
 				obs_module_text("UnloadWhenNotShowing"));
+	obs_properties_add_bool(props, "linear_alpha",
+				obs_module_text("LinearAlpha"));
 	dstr_free(&path);
 
 	return props;
@@ -253,10 +289,42 @@ uint64_t image_source_get_memory_usage(void *data)
 	return s->if2.mem_usage;
 }
 
+static void missing_file_callback(void *src, const char *new_path, void *data)
+{
+	struct image_source *s = src;
+
+	obs_source_t *source = s->source;
+	obs_data_t *settings = obs_source_get_settings(source);
+	obs_data_set_string(settings, "file", new_path);
+	obs_source_update(source, settings);
+	obs_data_release(settings);
+
+	UNUSED_PARAMETER(data);
+}
+
+static obs_missing_files_t *image_source_missingfiles(void *data)
+{
+	struct image_source *s = data;
+	obs_missing_files_t *files = obs_missing_files_create();
+
+	if (strcmp(s->file, "") != 0) {
+		if (!os_file_exists(s->file)) {
+			obs_missing_file_t *file = obs_missing_file_create(
+				s->file, missing_file_callback,
+				OBS_MISSING_FILE_SOURCE, s->source, NULL);
+
+			obs_missing_files_add_file(files, file);
+		}
+	}
+
+	return files;
+}
+
 static struct obs_source_info image_source_info = {
 	.id = "image_source",
 	.type = OBS_SOURCE_TYPE_INPUT,
-	.output_flags = OBS_SOURCE_VIDEO,
+	.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_CUSTOM_DRAW |
+			OBS_SOURCE_SRGB,
 	.get_name = image_source_get_name,
 	.create = image_source_create,
 	.destroy = image_source_destroy,
@@ -268,6 +336,7 @@ static struct obs_source_info image_source_info = {
 	.get_height = image_source_getheight,
 	.video_render = image_source_render,
 	.video_tick = image_source_tick,
+	.missing_files = image_source_missingfiles,
 	.get_properties = image_source_properties,
 	.icon_type = OBS_ICON_TYPE_IMAGE,
 };
